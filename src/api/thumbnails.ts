@@ -1,9 +1,9 @@
 import { getBearerToken, validateJWT } from "../auth";
 import { respondWithJSON } from "./json";
-import { getVideo } from "../db/videos";
+import { getVideo, updateVideo } from "../db/videos";
 import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
-import { BadRequestError, NotFoundError } from "./errors";
+import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 
 type Thumbnail = {
   data: ArrayBuffer;
@@ -49,5 +49,50 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
 
   // TODO: implement the upload here
 
-  return respondWithJSON(200, null);
+  const videoData = getVideo(cfg.db, videoId);
+
+  if (videoData?.userID !== userID) {
+    throw new UserForbiddenError("User not allowed");
+  }
+  const formData = await req.formData();
+  const file = formData.get("thumbnail");
+  if (!(file instanceof File)) {
+    throw new BadRequestError("Thumbnail file missing");
+  }
+  const MAX_UPLOAD_SIZE = 10 << 20;
+
+  if (file.size > MAX_UPLOAD_SIZE) {
+    throw new BadRequestError(
+      `Thumbnail file exceeds the maximum allowed size of 10MB`
+    );
+  }
+  const allowedType = ["image/png", "image/jpeg"];
+  const mediaType = file.type;
+  const isAllowedTypes = allowedType.includes(mediaType);
+  if (!isAllowedTypes) {
+    throw new BadRequestError("Missing Content-Type for thumbnail");
+  }
+
+  const fileData = await file.arrayBuffer();
+  if (!fileData) {
+    throw new Error("Error reading file data");
+  }
+
+  // safe to global Map ?
+
+  videoThumbnails.set(videoId, {
+    data: fileData,
+    mediaType,
+  });
+
+  const filename = `${videoId}.${mediaType.split("/")[1]}`;
+  const filePath = `${cfg.assetsRoot}/${filename}`;
+
+  await Bun.write(filePath, fileData);
+
+  videoData.thumbnailURL = filePath;
+
+  updateVideo(cfg.db, videoData);
+
+  return respondWithJSON(200, videoData);
 }
