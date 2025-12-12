@@ -1,5 +1,6 @@
 import { newDatabase } from "./db/db";
 import type { Database } from "bun:sqlite";
+import { s3, write, S3Client } from "bun";
 
 export type ApiConfig = {
   db: Database;
@@ -10,6 +11,7 @@ export type ApiConfig = {
   s3Bucket: string;
   s3Region: string;
   s3CfDistribution: string;
+  s3Client: Bun.S3Client;
   port: string;
 };
 
@@ -21,12 +23,16 @@ const assetsRoot = envOrThrow("ASSETS_ROOT");
 const s3Bucket = envOrThrow("S3_BUCKET");
 const s3Region = envOrThrow("S3_REGION");
 const s3CfDistribution = envOrThrow("S3_CF_DISTRO");
+const s3AccessKeyId = envOrThrow("AWS_ACCESS_KEY_ID");
+const s3SecretAccessKey = envOrThrow("AWS_SECRET_ACCESS_KEY");
 const port = envOrThrow("PORT");
 
 const db = newDatabase(pathToDB);
+const client = s3;
 
 export const cfg: ApiConfig = {
   db: db,
+  s3Client: client,
   jwtSecret: jwtSecret,
   platform: platform,
   filepathRoot: filepathRoot,
